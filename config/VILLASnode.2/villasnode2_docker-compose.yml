@@ -1,0 +1,29 @@
+# config/VILLASnode.2/docker-compose.yml
+#
+# [수정] 예전 파일은 "Host4 별도 머신 + signaling까지 이 파일에서 빌드 +
+#   ENERGYPLUS2_HOST 환경변수" 버전이었음. 지금은:
+#   - EnergyPlus#2 주소가 이미 hils.conf 안에 192.168.239.185:22001 로
+#     하드코딩되어 있어서 별도 환경변수 불필요
+#   - signaling 서버는 이 파일에서 빌드하지 않음 (CORE 쪽에서 별도로 관리 예정,
+#     또는 단독 테스트 시엔 별도로 signaling만 띄우면 됨)
+#   - hils.conf 의 hook 경로가 "/config/hooks/..."(단수)이므로 마운트도
+#     "/config"(단수)로 통일 (VILLASnode.1과 동일한 이유)
+#
+# 사용법 (이 폴더 안에서):
+#   cd config/VILLASnode.2
+#   docker compose up -d
+#
+# 참고: CORE 없이 VILLASnode #2만 단독으로 빠르게 띄워 확인하고 싶을 때 쓰는
+# 보조 수단입니다. webrtc_c.server 로 실제 signaling 서버가 떠 있어야
+# webrtc 연결이 성립합니다. 최종 WAN 구성은 COREEMUL/ 쪽 스크립트가 정식 경로입니다.
+
+services:
+  villas-node-2:
+    image: registry.git.rwth-aachen.de/acs/public/villas/node:latest
+    container_name: villas-node-2
+    network_mode: host
+    privileged: true
+    volumes:
+      - ./:/config:ro
+    command: ["node", "/config/hils.conf"]
+    restart: unless-stopped

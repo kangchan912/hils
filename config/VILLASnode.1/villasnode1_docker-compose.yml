@@ -1,0 +1,26 @@
+# config/VILLASnode.1/docker-compose.yml
+#
+# [수정 1] 이 파일이 config/VILLASnode.1/ 폴더 "안"으로 옮겨졌으므로,
+#   볼륨은 "./config"가 아니라 이 폴더 자기 자신("./")을 마운트해야 함.
+# [수정 2] hils.conf 안의 hook 경로가 "/config/hooks/..."(단수)로 되어 있는데
+#   예전 마운트 대상은 "/configs"(복수)였음 -> 컨테이너 안에서 hook을 못 찾아
+#   VILLASnode가 기동 실패함. 마운트 대상을 "/config"(단수)로 통일.
+#
+# 사용법 (이 폴더 안에서):
+#   cd config/VILLASnode.1
+#   docker compose up -d
+#
+# 참고: CORE 없이 VILLASnode #1만 단독으로 빠르게 띄워 확인하고 싶을 때 쓰는
+# 보조 수단입니다. 최종 WAN 구성(webrtc_a 로 VILLASnode #2와 연결)은
+# COREEMUL/ 쪽 스크립트로 띄우는 것이 정식 경로입니다.
+
+services:
+  villas-node-1:
+    image: registry.git.rwth-aachen.de/acs/public/villas/node:latest
+    container_name: villas-node-1
+    network_mode: host
+    privileged: true
+    volumes:
+      - ./:/config:ro
+    command: ["node", "/config/hils.conf"]
+    restart: unless-stopped
