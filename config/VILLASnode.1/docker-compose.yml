@@ -1,0 +1,9 @@
+services:
+  gw1:
+    image: villas-node-core:local
+    container_name: gw1
+    network_mode: none
+    privileged: true
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - /home/pin/hils/config/VILLASnode.1:/config
