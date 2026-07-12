@@ -1,0 +1,115 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scenario>
+  <networks>
+    <network id="2" name="Switch1" icon="" canvas="2" type="SWITCH">
+      <position x="194.0" y="403.3392639160156" lat="47.57550006735648" lon="-122.12971012127319" alt="2.0"/>
+    </network>
+    <network id="3" name="Switch2" icon="" canvas="2" type="SWITCH">
+      <position x="781.5494384765625" y="408.10406494140625" lat="47.57545675388613" lon="-122.1217930516618" alt="2.0"/>
+    </network>
+    <network id="4" name="ens33" icon="" canvas="2" type="RJ45">
+      <position x="116.2588882446289" y="400.3138427734375" lat="47.57552756932344" lon="-122.13075766170661" alt="2.0"/>
+    </network>
+    <network id="5" name="ens37" icon="" canvas="2" type="RJ45">
+      <position x="864.0672607421875" y="409.52532958984375" lat="47.57544383415728" lon="-122.12068114634751" alt="2.0"/>
+    </network>
+  </networks>
+  <devices>
+    <device id="6" name="gw1" icon="/root/.coregui/icons/docker.png" canvas="2" type="" class="docker" image="villas-node-core:local" compose="/home/pin/hils/config/VILLASnode.1/docker-compose.yml" compose_name="gw1">
+      <position x="270.8780517578125" y="404.5151062011719" lat="47.575489378600786" lon="-122.12867421033958" alt="2.0"/>
+    </device>
+    <device id="7" name="gw2" icon="" canvas="2" type="" class="docker" image="villas-node-core:local" compose="/home/pin/hils/config/VILLASnode.2/docker-compose.yml" compose_name="gw2">
+      <position x="701.7296752929688" y="407.1409912109375" lat="47.575465508518064" lon="-122.12286860136045" alt="2.0"/>
+    </device>
+    <device id="9" name="Router1" icon="" canvas="2" type="router" class="" image="" compose="" compose_name="">
+      <position x="396.1147155761719" y="403.25146484375" lat="47.575500865476045" lon="-122.12698668020099" alt="2.0"/>
+      <services>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="8" name="Router2" icon="" canvas="2" type="router" class="" image="" compose="" compose_name="">
+      <position x="564.0169677734375" y="406.01153564453125" lat="47.575475775609426" lon="-122.12472424281017" alt="2.0"/>
+      <services>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="1" name="signaling" icon="" canvas="2" type="" class="docker" image="villas-signaling-core:local" compose="" compose_name="">
+      <position x="484.92193603515625" y="279.1922302246094" lat="47.57662858849841" lon="-122.12579002694879" alt="2.0"/>
+    </device>
+  </devices>
+  <links>
+    <link node1="3" node2="5">
+      <iface1 id="1" name="veth3.1.1"/>
+      <iface2 id="0" name="ens37"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="2" node2="4">
+      <iface1 id="1" name="veth2.1.1"/>
+      <iface2 id="0" name="ens33"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="7" node2="3">
+      <iface1 id="2" name="eth2" mac="00:00:00:aa:00:05" ip4="192.168.239.251" ip4_mask="24" ip6="2001:0:0:3::14" ip6_mask="64"/>
+      <iface2 id="0" name="veth3.0.1"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="8" node2="7">
+      <iface1 id="0" name="eth0" mac="00:00:00:aa:00:0a" ip4="10.0.11.1" ip4_mask="24" ip6="2001:0:0:5::1" ip6_mask="64"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:0b" ip4="10.0.11.20" ip4_mask="24" ip6="2001:0:0:5::14" ip6_mask="64"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="1" node2="7">
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:02" ip4="10.0.31.2" ip4_mask="24" ip6="2001:0:0:8::14" ip6_mask="64"/>
+      <iface2 id="1" name="eth1" mac="00:00:00:aa:00:03" ip4="10.0.31.20" ip4_mask="24" ip6="2001:0:0:8::15" ip6_mask="64"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="9" node2="8">
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:0c" ip4="10.0.20.1" ip4_mask="24" ip6="2001:0:0:6::1" ip6_mask="64"/>
+      <iface2 id="1" name="eth1" mac="00:00:00:aa:00:0d" ip4="10.0.20.2" ip4_mask="24" ip6="2001:0:0:6::2" ip6_mask="64"/>
+      <options delay="80000" bandwidth="0" loss="1.0" dup="0" jitter="20000" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="2" node2="6">
+      <iface1 id="0" name="veth2.0.1"/>
+      <iface2 id="2" name="eth2" mac="00:00:00:aa:00:04" ip4="192.168.239.250" ip4_mask="24" ip6="2001:0:0:2::14" ip6_mask="64"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="6" node2="1">
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:00" ip4="10.0.30.20" ip4_mask="24" ip6="2001:0:0:7::14" ip6_mask="64"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:01" ip4="10.0.30.2" ip4_mask="24" ip6="2001:0:0:7::15" ip6_mask="64"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="6" node2="9">
+      <iface1 id="0" name="eth0" mac="00:00:00:aa:00:08" ip4="10.0.10.20" ip4_mask="24" ip6="2001:0:0:4::14" ip6_mask="64"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:09" ip4="10.0.10.1" ip4_mask="24" ip6="2001:0:0:4::1" ip6_mask="64"/>
+      <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+  </links>
+  <session_origin lat="47.579166412353516" lon="-122.13232421875" alt="2.0" scale="150.0"/>
+  <session_options>
+    <configuration name="controlnet" value=""/>
+    <configuration name="controlnet0" value=""/>
+    <configuration name="controlnet1" value=""/>
+    <configuration name="controlnet2" value=""/>
+    <configuration name="controlnet3" value=""/>
+    <configuration name="controlnet_updown_script" value=""/>
+    <configuration name="enablerj45" value="1"/>
+    <configuration name="preservedir" value="0"/>
+    <configuration name="enablesdt" value="0"/>
+    <configuration name="sdturl" value="tcp://127.0.0.1:50000/"/>
+    <configuration name="ovs" value="0"/>
+    <configuration name="platform_id_start" value="1"/>
+    <configuration name="nem_id_start" value="1"/>
+    <configuration name="link_enabled" value="1"/>
+    <configuration name="loss_threshold" value="30"/>
+    <configuration name="link_interval" value="1"/>
+    <configuration name="link_timeout" value="4"/>
+    <configuration name="mtu" value="0"/>
+    <configuration name="checksums" value="0"/>
+  </session_options>
+  <session_metadata>
+    <configuration name="shapes" value="[]"/>
+    <configuration name="edges" value="[]"/>
+    <configuration name="hidden" value="[]"/>
+    <configuration name="canvas" value="{&quot;gridlines&quot;: false, &quot;canvases&quot;: [{&quot;id&quot;: 2, &quot;wallpaper&quot;: null, &quot;wallpaper_style&quot;: 1, &quot;fit_image&quot;: false, &quot;dimensions&quot;: [1000, 750]}]}"/>
+  </session_metadata>
+</scenario>

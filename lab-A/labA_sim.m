@@ -7,6 +7,16 @@ function labA_sim(varargin)
 %     [8] VILLASnode로부터 소켓(UDP) 기반으로 피드백 수신
 %     [9] 받은 값(실내온도/HVAC전력)을 실제로 반영하여 다음 값 생성
 %
+%   [Lab C 왕복, 참고용] Lab C(WAN 건너편 EnergyPlus#2) 결과도 별도 포트
+%     (RecvPortC)로 Lab A까지 왕복해서 수신·출력한다. 제어 권한은 여전히
+%     Lab B(EnergyPlus#1) 하나이며, Lab C 값은 controller_update 에
+%     전달되지 않고 화면 표시만 된다.
+%
+%   [REST API, 참고용] 외부에서 VILLASnode의 REST API(api 노드타입,
+%     /api/v2/universal/rest_ctrl/channel/rest_value/sample)로 주입한 값도
+%     별도 포트(RecvPortRest)로 Lab A까지 전달되어 화면에 표시된다.
+%     이 값 역시 제어 계산(controller_update)에는 반영되지 않는다.
+%
 %   ※ 포맷: villas.human (텍스트) — hils.conf 의 lab_a 노드와 일치
 %      와이어 형식:  <sec>.<nsec>(<seq>)\t<v1>\t<v2>\t...\n
 %
@@ -16,18 +26,25 @@ function labA_sim(varargin)
 %        x(3)=rel_humidity[%]     x(4)=cooling_setpoint[degC]  <- 제어입력
 %     [8] 수신 (VILLAS -> Lab A, 2채널):
 %        y(1)=indoor_temp[degC]   y(2)=hvac_power[W]
+%     [참고] 수신 (VILLAS(lab_a_mon_c) -> Lab A, 2채널, RecvPortC):
+%        z(1)=indoor_temp_c[degC]  z(2)=hvac_power_c[W]   (Lab C, 제어 미반영)
+%     [참고] 수신 (VILLAS(lab_a_mon_rest) -> Lab A, 1채널, RecvPortRest):
+%        w(1)=rest_value[degC]   (REST API 로 주입된 값, 제어 미반영)
 %
 %   동작 (송신-구동, Period 주기):
 %     (1) [STEP1] 데이터 생성 (직전 피드백 반영한 setpoint 포함)
 %     (2) [STEP2] VILLAS 로 송신  -> (VILLAS -> Lab B(EnergyPlus) -> VILLAS)
 %     (3) [STEP8] 피드백 수신 대기 (최대 1주기)
 %     (4) [STEP9] 받은 indoor/hvac 를 반영 -> 다음 setpoint 계산에 사용
+%     (5) [참고] Lab C(WAN) 결과 수신 시도 (있으면 출력만, 제어 미반영)
+%     (6) [참고] REST API 로 주입된 값 수신 시도 (있으면 출력만, 제어 미반영)
 %     --- Period 초 후 loop 반복 ---
 %
 %   사용 예:
 %     labA_sim
-%     labA_sim('RemoteHost','192.168.239.159', ...
-%              'SendPort',12010,'RecvPort',12011,'Period',3.0)
+%     labA_sim('RemoteHost','192.168.239.250', ...
+%              'SendPort',12010,'RecvPort',12011,'RecvPortC',12012, ...
+%              'RecvPortRest',12013,'Period',3.0)
 %
 %   종료: Ctrl+C
 % -------------------------------------------------------------------------
@@ -37,6 +54,8 @@ function labA_sim(varargin)
     addParameter(p, 'RemoteHost', '192.168.239.159');   % VILLASnode 서버 IP
     addParameter(p, 'SendPort',   12010);               % [STEP2] TX (LabA->VILLAS lab_a.in)
     addParameter(p, 'RecvPort',   12011);               % [STEP8] RX (VILLAS->LabA lab_a.out)
+    addParameter(p, 'RecvPortC',  12012);                % [참고] Lab C(WAN, EnergyPlus#2) 결과 수신 (제어에는 미반영)
+    addParameter(p, 'RecvPortRest', 12013);               % [참고] REST API 로 주입된 값 수신 (제어에는 미반영)
     addParameter(p, 'Period',     3.0);                 % 루프 주기 [s]
     addParameter(p, 'Verbose',    true);
     parse(p, varargin{:});
@@ -49,11 +68,19 @@ function labA_sim(varargin)
     io = udp_open(cfg.RecvPort, cfg.RemoteHost, cfg.SendPort, recvTimeoutMs);
     cleanupObj = onCleanup(@() udp_close(io)); %#ok<NASGU>
 
+    % ---- [Java 담당] Lab C 참고용 수신 전용 소켓 (짧은 타임아웃으로 폴링) ----
+    ioC = udp_open_rx(cfg.RecvPortC, 50);
+    cleanupObjC = onCleanup(@() udp_close_rx(ioC)); %#ok<NASGU>
+
+    % ---- [Java 담당] REST API 참고용 수신 전용 소켓 (짧은 타임아웃으로 폴링) ----
+    ioRest = udp_open_rx(cfg.RecvPortRest, 50);
+    cleanupObjRest = onCleanup(@() udp_close_rx(ioRest)); %#ok<NASGU>
+
     if cfg.Verbose
         fprintf('%s\n', repmat('=', 1, 60));
         fprintf(' Lab A - Data Generator + HVAC Controller (9단계 HILS 폐루프)\n');
-        fprintf('  [STEP2] TX -> VILLAS %s:%d   [STEP8] RX <- :%d\n', ...
-            cfg.RemoteHost, cfg.SendPort, cfg.RecvPort);
+        fprintf('  [STEP2] TX -> VILLAS %s:%d   [STEP8] RX <- :%d   [참고] Lab C RX <- :%d   [참고] REST RX <- :%d\n', ...
+            cfg.RemoteHost, cfg.SendPort, cfg.RecvPort, cfg.RecvPortC, cfg.RecvPortRest);
         fprintf('  루프 주기: %.1f초\n', cfg.Period);
         fprintf('  종료하려면 Ctrl+C\n');
         fprintf('%s\n', repmat('=', 1, 60));
@@ -112,6 +139,26 @@ function labA_sim(varargin)
             end
         else
             fprintf('[Lab A | STEP8 대기] 이번 주기 내 피드백 미도착 (다음 루프에서 반영)\n');
+        end
+
+        % ---- [참고] Lab C(WAN, EnergyPlus#2) 결과 수신 — 제어에는 반영 안 함 ----
+        rawC = udp_recv(ioC);
+        if ~isempty(rawC)
+            [valuesC, seqC] = villas_human_decode(rawC);
+            if numel(valuesC) >= 2
+                fprintf('[Lab A | 참고] Lab C(WAN)  seq=%u | 실내온도=%.2f°C  HVAC전력=%.1fW (제어 미반영)\n', ...
+                    seqC, valuesC(1), valuesC(2));
+            end
+        end
+
+        % ---- [참고] REST API 로 주입된 값 수신 — 제어에는 반영 안 함 ----
+        rawRest = udp_recv(ioRest);
+        if ~isempty(rawRest)
+            [valuesRest, seqRest] = villas_human_decode(rawRest);
+            if numel(valuesRest) >= 1
+                fprintf('[Lab A | REST 수신] seq=%u | 값=%.2f (제어 미반영)\n', ...
+                    seqRest, valuesRest(1));
+            end
         end
 
         % ---- 정확히 Period 주기 유지 ----
@@ -204,7 +251,7 @@ function io = udp_open(localPort, remoteHost, remotePort, timeoutMs)
 end
 
 function raw = udp_recv(io)
-    % [STEP8] VILLASnode -> Lab A 수신
+    % [STEP8 / 참고] VILLASnode -> Lab A 수신 (범용, io.rx/io.packet만 있으면 됨)
     raw = [];
     io.packet.setLength(io.BUFLEN);
     try
@@ -233,6 +280,26 @@ function udp_close(io)
     try, io.rx.close(); catch, end
     try, io.tx.close(); catch, end
     fprintf('\n[Lab A] 소켓 정리 완료. 종료.\n');
+end
+
+function io = udp_open_rx(localPort, timeoutMs)
+    % [참고] Lab C / REST 결과 수신 전용 소켓 (송신 없음, 짧은 타임아웃으로 폴링)
+    import java.net.DatagramSocket
+    import java.net.InetSocketAddress
+
+    rx = DatagramSocket([]);
+    rx.setReuseAddress(true);
+    rx.bind(InetSocketAddress(localPort));
+    rx.setSoTimeout(timeoutMs);
+
+    io = struct();
+    io.rx     = rx;
+    io.BUFLEN = 1500;
+    io.packet = java.net.DatagramPacket(zeros(1, io.BUFLEN, 'int8'), io.BUFLEN);
+end
+
+function udp_close_rx(io)
+    try, io.rx.close(); catch, end
 end
 
 
