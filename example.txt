@@ -1,6 +1,4 @@
-192.168.239.189,190 (villas node, core)
-192.168.239.185 (energyplus, matlab)
-
+(core) sudo core-gui
 (matlab) matlab -batch "labA_sim('RemoteHost','192.168.239.250','SendPort',12010,'RecvPort',12011,'RecvPortC',12012,'RecvPortRest',12013,'Period',3.0)"
 (EnergyPlus#1) python3 ep_socket_sim.py hils_zone.idf KOR_Inchon.471120_IWEC.epw --local-port 12001 --remote-host 192.168.239.250 --remote-port 12003
 (EnergyPlus#2) python3 ep_socket_sim.py hils_zone.idf KOR_Inchon.471120_IWEC.epw --local-port 22001 --remote-host 192.168.239.251 --remote-port 22003
