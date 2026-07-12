@@ -1,23 +1,23 @@
-# ── IP 구성 ──────────────────────────────────────────────
-192.168.239.185  VMware#1  (MATLAB, EnergyPlus#1, EnergyPlus#2)
-192.168.239.189  VMware#2  (CORE 호스트, Docker)
-192.168.239.250  gw1       (CORE DockerNode, VILLASnode#1)
-192.168.239.251  gw2       (CORE DockerNode, VILLASnode#2)
+# ── IP / 포트 구성 ───────────────────────────────────────
+192.168.239.185  VMware#1  : MATLAB, EnergyPlus#1, EnergyPlus#2
+192.168.239.189  VMware#2  : CORE 호스트 (Docker)
+192.168.239.250  gw1       : VILLASnode#1 (CORE DockerNode)
+192.168.239.251  gw2       : VILLASnode#2 (CORE DockerNode)
 
-# ── 포트 맵 ─────────────────────────────────────────────
-Lab A    → VILLAS  : 12010 (UDP)
-VILLAS   → EP#1    : 12001 (UDP)
-EP#1     → VILLAS  : 12003 (UDP)
-VILLAS   → Lab A   : 12011 (UDP)
-Lab B.2  RX        : 12002 (UDP)
-Lab B.2  → VILLAS  : 12004 (UDP)
-Lab C    참고      : 12012 (UDP)
-REST API → Lab A   : 12013 (UDP)
-gw1 REST           : 8080  (TCP/HTTP)
+포트맵:
+  Lab A  → VILLAS  12010    VILLAS → Lab A  12011
+  VILLAS → EP#1    12001    EP#1   → VILLAS 12003
+  Lab C 참고       12012    REST   → Lab A  12013
+  gw1 REST API     8080 (TCP/HTTP)
 
-# ── CORE 세션 시작 ───────────────────────────────────────
-(VMware#2) 
-./run.sh
+# ── CORE 세션 시작 (VMware#2) ────────────────────────────
+cd ~/hils/core-emul
+./run_session.sh
+
+# ── VILLASnode 커스텀 이미지 빌드 (최초 1회, VMware#2) ───
+cd ~/hils/core-emul
+docker build -f Dockerfile.villas -t villas-node-core:local ..
+docker build -f Dockerfile.signaling -t villas-signaling-core:local ..
 
 # ── 시뮬레이터 실행 (VMware#1) ───────────────────────────
 (MATLAB)
@@ -32,14 +32,15 @@ python3 ep_socket_sim.py hils_zone.idf KOR_Inchon.471120_IWEC.epw \
   --local-port 22001 --remote-host 192.168.239.251 --remote-port 22003
 
 # ── REST API 외부 주입 (특별제안) ────────────────────────
-# 값 주입 (Lab A 12013으로 전달됨)
 curl -XPUT -H "Content-Type: application/json" \
   -d '{"timestamp": 0, "value": 25.5}' \
   http://192.168.239.250:8080/api/v2/universal/rest_ctrl/channel/rest_value/sample
+# 성공 시 응답: {}
+# Lab A 콘솔: [Lab A | REST 수신] seq=N | 값=25.50 (제어 미반영)
 
-# ── VILLASnode 버그 패치 정보 ────────────────────────────
-# 적용 패치: patches/channel_sample_fix.patch
-# 대상: lib/api/requests/universal/channel.cpp L132
-# 내용: PayloadType::EVENTS → PayloadType::SAMPLES (/sample 엔드포인트 오작동 수정)
-# 참고: check()는 SAMPLES 강제, execute()는 EVENTS 하드코딩 — 상호 모순 upstream 버그
-#       loopback path (rest_ctrl => rest_ctrl) 추가로 out-signal 미초기화 segfault 우회
+# ── VILLASnode 패치 정보 ─────────────────────────────────
+# 파일: patches/channel_sample_fix.patch
+# 대상: lib/api/requests/universal/channel.cpp L132, L134
+# 내용: PayloadType::EVENTS → PayloadType::SAMPLES
+# 원인: check()는 SAMPLES 강제, execute()는 EVENTS 하드코딩 → 상호 모순
+# 우회: loopback path (rest_ctrl => rest_ctrl) — out-signal 미초기화 segfault 방지
