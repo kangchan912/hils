@@ -1,0 +1,264 @@
+! =====================================================================
+! [폐루프 HILS] Lab A(HVAC Controller) -> EnergyPlus(Plant)
+!   Lab A 가 보낸 cooling_setpoint(4번째 채널)는 ep_socket_sim.py 에서
+!   EMS Actuator (Schedule:Constant 'Cooling SP Sch') 로 동적 주입된다.
+!   EP 는 이 설정온도로 IdealLoads 냉방을 계산하고
+!   indoor_temp(Zone Mean Air Temperature) + hvac_power(Cooling Rate)
+!   를 Lab A 로 돌려보낸다. (별도 IDF EMS 선언 불필요 — 코드가 핸들 취득)
+! =====================================================================
+
+! ============================================================
+! hils_zone.idf — EnergyPlus 완전 IDF (VILLASnode HILS 연동)
+! EnergyPlus 25.2.0 검증본
+!
+! ── FMU EXPORT 버전 (FMI 2.0 Co-Simulation) ──
+! 기존 EMS 직접 주입 방식을 ExternalInterface:FunctionalMockupUnitExport
+! 방식으로 전환. EnergyPlusToFMU 로 .fmu 빌드 후 PyFMI(fmu_bridge.py)가
+! do_step 으로 구동.
+!
+! Zone: 5m x 5m x 3m 단일 존
+! HVAC: ZoneHVAC:IdealLoadsAirSystem
+! FMU 입력 : Tout(외기온도), Isol(일사량)  → EMS 액추에이터로 주입
+! FMU 출력 : Troom(실내온도), QCool(냉방부하)
+! ============================================================
+
+Version,25.2.0;
+
+SimulationControl,
+    No,    !- Do Zone Sizing Calculation
+    No,    !- Do System Sizing Calculation
+    No,    !- Do Plant Sizing Calculation
+    No,    !- Run Sizing Periods
+    Yes;   !- Run Weather File Simulation Periods
+
+RunPeriod,
+    Annual Run,
+    1, 1, ,
+    12, 31, ,
+    Sunday,
+    Yes, Yes, Yes, Yes, Yes;
+
+Site:Location,
+    Incheon Korea,
+    37.45, 126.42, 9.0, 70.0;
+
+Building,
+    HILS Building,
+    0.0, Suburbs, 0.04, 0.4,
+    FullExterior, 25, 6;
+
+GlobalGeometryRules,
+    UpperLeftCorner, CounterClockWise, World;
+
+Timestep, 6;
+
+! ── Zone ────────────────────────────────────────────────────
+Zone,
+    ZONE ONE,
+    0, 0, 0, 0,
+    1, 1,
+    autocalculate,
+    autocalculate;
+
+! ── 재료 ────────────────────────────────────────────────────
+Material,
+    Concrete 200mm,
+    MediumRough, 0.2, 1.63, 2240, 900, 0.9, 0.65, 0.65;
+
+Material,
+    Insulation 50mm,
+    MediumRough, 0.05, 0.04, 32, 835, 0.9, 0.6, 0.6;
+
+Material,
+    Gypsum 13mm,
+    Smooth, 0.013, 0.16, 784, 830, 0.9, 0.92, 0.92;
+
+WindowMaterial:SimpleGlazingSystem,
+    Double Pane Glass,
+    2.7, 0.4;
+
+Construction,
+    Ext Wall,
+    Concrete 200mm, Insulation 50mm, Gypsum 13mm;
+
+Construction,
+    Roof Const,
+    Concrete 200mm, Insulation 50mm, Gypsum 13mm;
+
+Construction,
+    Floor Const,
+    Concrete 200mm;
+
+Construction,
+    Window Const,
+    Double Pane Glass;
+
+! ── 표면 (5x5x3m 박스) ───────────────────────────────────────
+BuildingSurface:Detailed,
+    Floor, Floor, Floor Const, ZONE ONE, ,
+    Ground, , NoSun, NoWind, , ,
+    0,5,0,  5,5,0,  5,0,0,  0,0,0;
+
+BuildingSurface:Detailed,
+    Roof, Roof, Roof Const, ZONE ONE, ,
+    Outdoors, , SunExposed, WindExposed, , ,
+    0,0,3,  5,0,3,  5,5,3,  0,5,3;
+
+BuildingSurface:Detailed,
+    Wall South, Wall, Ext Wall, ZONE ONE, ,
+    Outdoors, , SunExposed, WindExposed, , ,
+    0,0,0,  0,0,3,  5,0,3,  5,0,0;
+
+BuildingSurface:Detailed,
+    Wall North, Wall, Ext Wall, ZONE ONE, ,
+    Outdoors, , SunExposed, WindExposed, , ,
+    5,5,0,  5,5,3,  0,5,3,  0,5,0;
+
+BuildingSurface:Detailed,
+    Wall East, Wall, Ext Wall, ZONE ONE, ,
+    Outdoors, , SunExposed, WindExposed, , ,
+    5,0,0,  5,0,3,  5,5,3,  5,5,0;
+
+BuildingSurface:Detailed,
+    Wall West, Wall, Ext Wall, ZONE ONE, ,
+    Outdoors, , SunExposed, WindExposed, , ,
+    0,5,0,  0,5,3,  0,0,3,  0,0,0;
+
+FenestrationSurface:Detailed,
+    Window South, Window, Window Const,
+    Wall South, , 0.6, , , 4,
+    4,0,0.5,  1,0,0.5,  1,0,2.5,  4,0,2.5;
+
+! ── 내부 발열 ────────────────────────────────────────────────
+ScheduleTypeLimits, Any Number;
+ScheduleTypeLimits, Fraction, 0.0, 1.0, Continuous;
+ScheduleTypeLimits, On Off, 0, 1, Discrete;
+
+Schedule:Constant, Always On, Fraction, 1.0;
+Schedule:Constant, Always On Discrete, On Off, 1.0;
+Schedule:Constant, Activity Sch, Any Number, 120.0;
+Schedule:Constant, Heating SP Sch, Any Number, 20.0;
+Schedule:Constant, Cooling SP Sch, Any Number, 26.0;
+Schedule:Constant, Control Type Sch, Any Number, 4.0;
+
+Lights,
+    Zone Lights, ZONE ONE, Always On Discrete,
+    Watts/Area, , 10.0, ,
+    0.0, 0.32, 0.18, , General;
+
+People,
+    Zone People, ZONE ONE, Always On Discrete,
+    People, 5, , ,
+    0.3, , Activity Sch;
+
+! ── 온도 제어 ────────────────────────────────────────────────
+ThermostatSetpoint:DualSetpoint,
+    Dual Setpoint,
+    Heating SP Sch,
+    Cooling SP Sch;
+
+ZoneControl:Thermostat,
+    Zone Thermostat, ZONE ONE,
+    Control Type Sch,
+    ThermostatSetpoint:DualSetpoint,
+    Dual Setpoint;
+
+! ── HVAC: IdealLoads ─────────────────────────────────────────
+ZoneHVAC:IdealLoadsAirSystem,
+    ZONE ONE Ideal Loads,
+    ,
+    Zone Inlet Node,
+    ,
+    ,
+    50, 13,
+    0.015, 0.009,
+    NoLimit, , ,
+    NoLimit, , ,
+    , ,
+    None, , None,
+    , ,
+    None, NoEconomizer, None,
+    , ;
+
+ZoneHVAC:EquipmentList,
+    Zone Equipment List,
+    SequentialLoad,
+    ZoneHVAC:IdealLoadsAirSystem,
+    ZONE ONE Ideal Loads,
+    1, 1, , ;
+
+ZoneHVAC:EquipmentConnections,
+    ZONE ONE,
+    Zone Equipment List,
+    Zone Inlet Node List,
+    ,
+    Zone Air Node,
+    Zone Return Node;
+
+NodeList,
+    Zone Inlet Node List,
+    Zone Inlet Node;
+
+! ============================================================
+! ── ExternalInterface 활성화 (FMU Export) ───────────────────
+! ============================================================
+ExternalInterface,
+    FunctionalMockupUnitExport;   !- Name of External Interface
+
+! ── FMU 입력 (Lab A → EP) : To:Actuator ─────────────────────
+ExternalInterface:FunctionalMockupUnitExport:To:Actuator,
+    EMSToutActuator,           !- Name
+    Environment,               !- Actuated Component Unique Name
+    Weather Data,              !- Actuated Component Type
+    Outdoor Dry Bulb,          !- Actuated Component Control Type
+    Tout,                      !- FMU Variable Name  (= FMU_IN_OUTDOOR)
+    25.0;                      !- Initial Value
+
+ExternalInterface:FunctionalMockupUnitExport:To:Actuator,
+    EMSIsolActuator,           !- Name
+    Environment,               !- Actuated Component Unique Name
+    Weather Data,              !- Actuated Component Type
+    Diffuse Solar,             !- Actuated Component Control Type
+    Isol,                      !- FMU Variable Name  (= FMU_IN_SOLAR)
+    0.0;                       !- Initial Value
+
+! ── FMU 출력 (EP → Lab A) : From:Variable ───────────────────
+! FMU Variable Name 은 fmu_bridge.py 의 FMU_OUT_* 과 정확히 일치해야 함.
+ExternalInterface:FunctionalMockupUnitExport:From:Variable,
+    ZONE ONE,                              !- Output:Variable Index Key Name
+    Zone Mean Air Temperature,             !- Output:Variable Name
+    Troom;                                 !- FMU Variable Name (= FMU_OUT_INDOOR)
+
+ExternalInterface:FunctionalMockupUnitExport:From:Variable,
+    ZONE ONE Ideal Loads,                           !- Output:Variable Index Key Name
+    Zone Ideal Loads Supply Air Total Cooling Rate, !- Output:Variable Name
+    QCool;                                          !- FMU Variable Name (= FMU_OUT_COOL)
+
+! ============================================================
+! ── 확장 시나리오 (주석 — 해제 시 동작) ─────────────────────
+! ============================================================
+! [1-2] 상대습도(RH) FMU 입력 추가
+!   fmu_bridge.py 를 --rh-input 으로 실행할 때 아래 주석 해제.
+!   FMI 변수는 모두 Real(float) 이므로 int→float 타입 이슈 없음.
+!
+! ExternalInterface:FunctionalMockupUnitExport:To:Actuator,
+!     EMSRHActuator,
+!     Environment,
+!     Weather Data,
+!     Outdoor Relative Humidity,
+!     RH,
+!     50.0;
+! ============================================================
+
+! ── 출력 변수 ─────────────────────────────────────────────────
+! From:Variable 이 참조하는 Output:Variable 은 반드시 선언되어 있어야 함.
+Output:Variable, ZONE ONE, Zone Mean Air Temperature,          TimeStep;
+Output:Variable, ZONE ONE Ideal Loads, Zone Ideal Loads Supply Air Total Cooling Rate, TimeStep;
+Output:Variable, ZONE ONE, Zone Ideal Loads Heating Rate,      TimeStep;
+Output:Variable, ZONE ONE, Zone Mean Air Humidity Ratio,       TimeStep;
+
+Output:Variable, *, Site Outdoor Air Drybulb Temperature, TimeStep;
+
+OutputControl:Table:Style, HTML;
+Output:Table:SummaryReports, AllSummary;
+
